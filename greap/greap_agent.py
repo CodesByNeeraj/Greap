@@ -26,6 +26,20 @@ def trimHistory(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return trimmed
 
 
+def removeRepeatedLines(text: str) -> str:
+    """Drop a line that repeats the one right before it.
+
+    The model sometimes says the same sentence twice in one reply. Product lists
+    are unaffected because no two of their lines are identical.
+    """
+    kept: list[str] = []
+    for line in text.split("\n"):
+        if line.strip() and kept and kept[-1].strip() == line.strip():
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
 def assistantMessage(message: Any) -> dict[str, Any]:
     """Convert the SDK message back into the dict the API expects."""
     result: dict[str, Any] = {"role": "assistant", "content": message.content}
@@ -70,7 +84,7 @@ class GreapAgent:
             message = reply.choices[0].message
             history.append(assistantMessage(message))
             if not message.tool_calls:
-                return message.content or FALLBACK_REPLY
+                return removeRepeatedLines(message.content or FALLBACK_REPLY)
             await self.runToolCalls(telegramId, message.tool_calls, history)
         return FALLBACK_REPLY
 
