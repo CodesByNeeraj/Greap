@@ -17,7 +17,6 @@ from greap.reap_client import ReapClient
 from greap.toolbox import Toolbox
 
 WELCOME = "Welcome to Greap. Let's save money together!"
-ASK_NAME = "What's your name?"
 PAY_COMMAND = "/pay"
 
 
@@ -44,7 +43,8 @@ class GreapApp:
         """FR-1.1 to FR-1.5 for the first contact, then payments, then the agent."""
         if not self.store.getUser(telegramId):
             self.store.upsertUser(telegramId)
-            return [WELCOME, ASK_NAME]
+            # Their first message is answered too, so they can ask for items at once.
+            return [WELCOME, await self.agent.handleMessage(telegramId, text)]
         if self.desk.isPaying(telegramId):
             return [await self.handlePaymentText(telegramId, text)]
         if text.strip().lower().startswith(PAY_COMMAND):

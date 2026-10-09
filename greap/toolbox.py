@@ -14,7 +14,8 @@ from greap.queue_engine import cancelEntry, changeUnits
 from greap.recommendations import recommendationsFor
 from greap.shopping_tools import ShoppingTools
 
-NEEDS_PROFILE = ("search_products", "join_queue", "buy_carton")
+# Browsing is free; only commitments need an address to ship to.
+NEEDS_PROFILE = ("join_queue", "buy_carton")
 
 
 class Toolbox:
