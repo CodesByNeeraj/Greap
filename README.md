@@ -4,6 +4,10 @@ Greap is a Telegram shopping agent that helps people save money by buying in bul
 
 Suppliers on Reap sell in bulk units that differ by product: a carton of 24, a box, a bag. Greap lets several people join a shared queue for one bulk unit and pay only for the units they need. When the queue fills a carton, the carton is bought and split.
 
+## Presentation deck
+
+The pitch deck for the buildathon is in [docs/greap-pitch.pdf](docs/greap-pitch.pdf).
+
 ## How it works
 
 1. **Onboarding.** A new user gets a welcome message, then the agent asks for their name and shipping address, one question at a time.
