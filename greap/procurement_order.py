@@ -5,6 +5,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
+
 from greap.config import Settings
 from greap.constants import REAP_POLL_ATTEMPTS, REAP_POLL_SECONDS
 from greap.constants import REAP_STATUS_ACTIVE, REAP_STATUS_COMPLETED
@@ -75,20 +77,28 @@ class ProcurementOrder:
 
     async def ensureEnrollment(self) -> str:
         """One company card is enrolled once, then reused for every order."""
-        if self.enrollmentPath.exists():
-            saved = json.loads(self.enrollmentPath.read_text())["id"]
-            current = await self.reap.getEnrollment(saved)
-            if current["status"] == REAP_STATUS_ACTIVE:
-                return saved
-        enrollment = await self.reap.createEnrollment(ENROLLMENT_CUSTOMER_ID)
-        self.settings.dataDir.mkdir(parents=True, exist_ok=True)
-        self.enrollmentPath.write_text(json.dumps({"id": enrollment["id"]}))
+        enrollment = await self.loadSavedEnrollment()
+        if enrollment and enrollment["status"] == REAP_STATUS_ACTIVE:
+            return enrollment["id"]
+        # A card page that is still open is reused, so repeat runs do not pile up
+        # new enrollments while the user is mid-way through the hosted page.
+        if not enrollment or enrollment["status"] != REAP_STATUS_REQUIRES_ACTION:
+            enrollment = await self.reap.createEnrollment(ENROLLMENT_CUSTOMER_ID)
+            self.settings.dataDir.mkdir(parents=True, exist_ok=True)
+            self.enrollmentPath.write_text(json.dumps({"id": enrollment["id"]}))
         await self.notifier.sendOps(
             "Card needed once for Reap. Open and enter the sandbox card "
             f"(OTP 456789):\n{enrollment['nextAction']['url']}"
         )
         await self.pollUntil(lambda: self.enrollmentActive(enrollment["id"]))
         return enrollment["id"]
+
+    async def loadSavedEnrollment(self) -> dict[str, Any] | None:
+        """The enrollment from a previous run, as Reap currently sees it."""
+        if not self.enrollmentPath.exists():
+            return None
+        saved = json.loads(self.enrollmentPath.read_text())["id"]
+        return await self.reap.getEnrollment(saved)
 
     async def enrollmentActive(self, enrollmentId: str) -> bool:
         """True once the hosted card page was completed."""
@@ -122,7 +132,12 @@ class ProcurementOrder:
     async def pollUntil(self, check: Any) -> Any:
         """Poll a coroutine function until it returns something truthy."""
         for _ in range(REAP_POLL_ATTEMPTS):
-            result = await check()
+            try:
+                result = await check()
+            except httpx.TransportError:
+                # A dropped connection should not abandon a card page the user
+                # is still filling in, so keep polling.
+                result = None
             if result:
                 return result
             await asyncio.sleep(REAP_POLL_SECONDS)
