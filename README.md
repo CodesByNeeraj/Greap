@@ -56,14 +56,6 @@ Fill in `.env`:
 .venv/bin/python -m greap.telegram_bot
 ```
 
-The bot only replies while this process is running. To test without Telegram:
-
-```
-.venv/bin/python -m greap.cli_chat
-```
-
-In the terminal chat, `/as <id>` switches user, `/advance <hours>` skips time (useful for 5-day deadlines), `/tick` runs the deadline checks and `/pay` pays.
-
 ### Real checkout needs a card, once
 
 Reap checkout needs an enrolled card, and enrollment can only be completed on Reap's hosted page. Run this once, open the link it prints, enter the sandbox card and use OTP `456789`:
@@ -73,14 +65,6 @@ Reap checkout needs an enrolled card, and enrollment can only be completed on Re
 ```
 
 The enrollment is saved to `data/reap-enrollment.json` and reused for every order. Without a card, use `GREAP_DRY_RUN=1` to test the whole journey.
-
-### Demo helper
-
-To show the happy flow live, fill an open queue as if other shoppers had joined and paid. Stop the bot first, then restart it afterwards:
-
-```
-.venv/bin/python -m greap.simulate_fill "Box of 6 Mixed Cookies"
-```
 
 ## Tests and code quality
 
