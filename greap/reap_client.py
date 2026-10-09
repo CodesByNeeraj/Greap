@@ -1,5 +1,6 @@
 """Thin async client for Reap's Agentic API: one method per endpoint we use."""
 
+import asyncio
 import uuid
 from typing import Any
 
@@ -10,6 +11,10 @@ from greap.constants import REAP_AVAILABILITY_FILTER, REAP_RETURN_URL
 from greap.constants import REAP_SIMULATE_COMPLETED, REAP_SIMULATE_HEADER
 
 REQUEST_TIMEOUT_SECONDS = 30
+# Reap answers 503 for short outages that clear within seconds.
+RETRYABLE_STATUSES = (502, 503, 504)
+RETRY_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 1
 
 
 class ReapApiError(RuntimeError):
@@ -40,10 +45,21 @@ class ReapClient:
         }
         if method == "POST":
             headers["Idempotency-Key"] = str(uuid.uuid4())
-        reply = await self.http.request(method, path, json=body, headers=headers)
+        reply = await self.sendWithRetry(method, path, body, headers)
         if reply.status_code >= 400:
             raise ReapApiError(f"{method} {path} -> {reply.status_code}: {reply.text}")
         return reply.json()
+
+    async def sendWithRetry(
+        self, method: str, path: str, body: dict | None, headers: dict
+    ) -> httpx.Response:
+        """Retry brief Reap outages; the idempotency key makes POST retries safe."""
+        for attempt in range(RETRY_ATTEMPTS):
+            reply = await self.http.request(method, path, json=body, headers=headers)
+            if reply.status_code not in RETRYABLE_STATUSES:
+                break
+            await asyncio.sleep(RETRY_DELAY_SECONDS * (attempt + 1))
+        return reply
 
     async def searchProducts(self, query: str, limit: int, cursor: str | None) -> dict:
         """Search Reap's merchant catalog; available items only (FR-2.3)."""
