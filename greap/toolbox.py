@@ -8,13 +8,13 @@ from greap.context_store import ContextStore
 from greap.money import formatMoney
 from greap.notifier import Notifier
 from greap.procurement_search import ProcurementSearch
+from greap.profile import PROFILE_FIELDS, missingProfileFields
 from greap.queue_deadlines import applyChoice
 from greap.queue_engine import cancelEntry, changeUnits
 from greap.recommendations import recommendationsFor
 from greap.shopping_tools import ShoppingTools
 
-REQUIRED_PROFILE_FIELDS = ("name", "addressLine1", "city", "country")
-PROFILE_FIELDS = REQUIRED_PROFILE_FIELDS + ("postalCode",)
+NEEDS_PROFILE = ("search_products", "join_queue", "buy_carton")
 
 
 class Toolbox:
@@ -48,6 +48,10 @@ class Toolbox:
         }
         if name not in handlers:
             return {"error": f"Unknown tool {name}"}
+        missing = missingProfileFields(self.store.getUser(tid))
+        if name in NEEDS_PROFILE and missing:
+            # Orders need a full address, so block shopping until it is saved.
+            return {"error": f"Profile incomplete. Ask the user for: {missing}"}
         try:
             return await handlers[name](tid, **args)
         except TypeError as error:
@@ -60,7 +64,7 @@ class Toolbox:
         )
         return {
             "saved": True,
-            "stillMissing": [f for f in REQUIRED_PROFILE_FIELDS if f not in user],
+            "stillMissing": missingProfileFields(user),
         }
 
     def describeEntry(self, entry: dict) -> dict:
