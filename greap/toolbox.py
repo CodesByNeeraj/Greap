@@ -2,6 +2,8 @@
 
 from typing import Any
 
+import httpx
+
 from greap.clock import Clock
 from greap.constants import ENTRY_CANCELLED, ENTRY_EXPIRED, ENTRY_ORDERED, ENTRY_PAID
 from greap.context_store import ContextStore
@@ -10,12 +12,13 @@ from greap.notifier import Notifier
 from greap.procurement_search import ProcurementSearch
 from greap.profile import PROFILE_FIELDS, missingProfileFields
 from greap.queue_deadlines import applyChoice
+from greap.reap_client import ReapApiError
 from greap.queue_engine import cancelEntry, changeUnits
 from greap.recommendations import recommendationsFor
 from greap.shopping_tools import ShoppingTools
 
-# Browsing is free; only commitments need an address to ship to.
-NEEDS_PROFILE = ("join_queue", "buy_carton")
+# Onboarding comes first: nothing works until the profile is complete.
+NEEDS_PROFILE = ("search_products", "join_queue", "buy_carton")
 
 
 class Toolbox:
@@ -57,6 +60,9 @@ class Toolbox:
             return await handlers[name](tid, **args)
         except TypeError as error:
             return {"error": f"Bad arguments: {error}"}
+        except (ReapApiError, httpx.TransportError) as error:
+            # Reap outages happen; the agent should tell the user, not go silent.
+            return {"error": f"Reap is unavailable right now, try again soon: {error}"}
 
     async def saveProfile(self, tid: str, **fields: str) -> dict:
         """FR-1.4 and FR-1.6: partial saves let onboarding go one question at a time."""
