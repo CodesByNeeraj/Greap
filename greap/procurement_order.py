@@ -52,12 +52,26 @@ class ProcurementOrder:
             variantId = await self.search.resolveVariantId(queue)
             if not variantId:
                 return OrderResult(False, error="Product no longer in Reap catalog")
-            enrollmentId = await self.ensureEnrollment()
             quote = await self.reap.createQuote(variantId, queue["cartons"], address)
+            if self.settings.dryRun:
+                return self.dryRunResult(quote)
+            enrollmentId = await self.ensureEnrollment()
             checkout = await self.reap.createCheckout(quote["id"], enrollmentId)
             return await self.waitForCheckout(checkout)
         except (ReapApiError, TimeoutError) as error:
             return OrderResult(success=False, error=str(error))
+
+    def dryRunResult(self, quote: dict[str, Any]) -> OrderResult:
+        """Test mode: the quote above was real, but no card or charge is used.
+
+        This lets the whole user journey be tested before a card is enrolled.
+        """
+        final = quote["amountBreakdown"]["finalAmount"]
+        return OrderResult(
+            success=True,
+            orderId=f"DRY-RUN-{quote['id'][:8]}",
+            amount=str(final["amount"]),
+        )
 
     async def ensureEnrollment(self) -> str:
         """One company card is enrolled once, then reused for every order."""
