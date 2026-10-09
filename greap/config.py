@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from greap.constants import REAP_VERSION
 
 DEFAULT_REAP_URL = "https://sandbox.api.reap.global"
-DEFAULT_MODEL = "gpt-5.4-mini"
+DEFAULT_MODEL = "gpt-6.1-sol"
 DEFAULT_DATA_DIR = "data"
 DEFAULT_EMAIL = "orders@example.com"
 # Reap requires a phone number on shipping addresses but the PRD never asks

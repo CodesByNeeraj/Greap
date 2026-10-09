@@ -43,7 +43,7 @@ Fill in `.env`:
 | `TELEGRAM_BOT_TOKEN` | for Telegram | Create a bot with @BotFather and paste its token |
 | `GREAP_OPS_TELEGRAM_ID` | optional | Your Telegram user id. Reap card-entry and approval links and order failures go to this chat. Without it they print in the terminal. |
 | `GREAP_DRY_RUN` | optional | Set to `1` to take a real Reap quote but skip the card and the charge |
-| `GREAP_MODEL` | optional | OpenAI model, default `gpt-5.4-mini` |
+| `GREAP_MODEL` | optional | OpenAI model, default `gpt-6.1-sol` |
 | `REAP_COUNTRY`, `REAP_CURRENCY` | optional | Catalog market, default `SG` and `SGD` |
 | `GREAP_ORDER_EMAIL`, `GREAP_DEFAULT_PHONE` | optional | Contact details sent with sandbox orders |
 | `GREAP_DATA_DIR` | optional | Where data is stored, default `data/` |
