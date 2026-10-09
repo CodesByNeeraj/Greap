@@ -3,7 +3,9 @@
 from typing import Any
 
 from greap.bulk_classifier import BulkClassifier, isBulkEligible
-from greap.constants import MODE_DIRECT_ONLY, MODE_QUEUE_OR_DIRECT, SEARCH_PAGE_SIZE
+from greap.constants import MODE_DIRECT_ONLY, MODE_QUEUE_OR_DIRECT
+from greap.constants import MAX_SEARCH_FETCHES, REAP_FETCH_SIZE
+from greap.constants import SEARCH_RESULT_LIMIT
 from greap.context_store import ContextStore
 from greap.money import unitPriceOf
 from greap.reap_client import ReapClient
@@ -28,23 +30,40 @@ class ProcurementSearch:
 
     async def search(self, query: str, cursor: str | None) -> dict[str, Any]:
         """Return one page of priced products plus the cursor for the next."""
-        page = await self.reap.searchProducts(query, SEARCH_PAGE_SIZE, cursor)
-        # Reap says available but the preview variant is what we would buy.
-        found = [
-            p
-            for p in page["products"]
-            if p.get("available") and p.get("previewVariant")
-        ]
-        for product in found:
-            product["stableKey"] = stableKeyOf(product)
+        found, nextCursor = await self.collectPage(query, cursor)
         await self.classifier.classifyProducts(found)
-        pagination = page.get("pagination", {})
         return {
             "products": [self.toProduct(p) for p in found],
-            "nextCursor": (
-                pagination.get("nextCursor") if pagination.get("hasNextPage") else None
-            ),
+            "nextCursor": nextCursor,
         }
+
+    async def collectPage(
+        self, query: str, cursor: str | None
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """Keep fetching until all sellable products (up to the cap) are gathered.
+
+        Reap filters out unavailable items after paging, so one fetch can hold
+        far fewer than the limit even when many more results exist.
+        """
+        found: list[dict[str, Any]] = []
+        for _ in range(MAX_SEARCH_FETCHES):
+            # Never ask for more than the cap still allows, so we cannot overshoot.
+            wanted = min(REAP_FETCH_SIZE, SEARCH_RESULT_LIMIT - len(found))
+            page = await self.reap.searchProducts(query, wanted, cursor)
+            found += [p for p in page["products"] if self.isSellable(p)]
+            pagination = page.get("pagination", {})
+            cursor = (
+                pagination.get("nextCursor") if pagination.get("hasNextPage") else None
+            )
+            if len(found) >= SEARCH_RESULT_LIMIT or not cursor:
+                break
+        for product in found:
+            product["stableKey"] = stableKeyOf(product)
+        return found, cursor
+
+    def isSellable(self, raw: dict[str, Any]) -> bool:
+        """The preview variant is what we would buy, so it must exist."""
+        return bool(raw.get("available") and raw.get("previewVariant"))
 
     def toProduct(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Flatten Reap's shape into what queues and the agent need."""

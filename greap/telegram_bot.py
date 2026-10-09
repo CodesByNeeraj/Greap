@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
 from greap.config import loadSettings
-from greap.constants import TICK_SECONDS
+from greap.constants import TELEGRAM_MESSAGE_LIMIT, TICK_SECONDS
 from greap.greap_app import GreapApp
 
 
@@ -27,6 +27,21 @@ class TelegramNotifier:
             print(f"[OPS] {text}")
 
 
+def splitForTelegram(text: str) -> list[str]:
+    """Telegram rejects messages over 4096 chars, so long lists go in pieces.
+
+    Cutting on line breaks keeps each product line whole.
+    """
+    chunks: list[str] = []
+    current = ""
+    for line in text.split("\n"):
+        if current and len(current) + len(line) + 1 > TELEGRAM_MESSAGE_LIMIT:
+            chunks.append(current)
+            current = ""
+        current = f"{current}\n{line}" if current else line
+    return chunks + [current]
+
+
 def buildApplication() -> Application:
     """Create the Telegram app, wiring messages and the deadline timer."""
     settings = loadSettings()
@@ -41,7 +56,8 @@ def buildApplication() -> Application:
         """Every text, including /pay, goes through the same router."""
         telegramId = str(update.effective_user.id)
         for reply in await greap.handleMessage(telegramId, update.message.text):
-            await update.message.reply_text(reply)
+            for chunk in splitForTelegram(reply):
+                await update.message.reply_text(chunk)
 
     async def onTick(context: ContextTypes.DEFAULT_TYPE) -> None:
         """Periodic deadline checks."""
