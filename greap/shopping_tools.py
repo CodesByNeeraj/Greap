@@ -60,6 +60,7 @@ class ShoppingTools:
         size = product["cartonSize"]
         direct = product["mode"] == MODE_DIRECT_ONLY
         return {
+            "line": self.productLine(product, filled),
             "productId": product["productId"],
             "name": product["name"],
             "merchant": product["merchant"],
@@ -71,6 +72,19 @@ class ShoppingTools:
             "queueProgress": None if direct else f"{filled}/{size} filled",
             "fillRatio": 0 if direct else filled / size,
         }
+
+    def productLine(self, product: dict, filled: int) -> str:
+        """FR-2.6 and FR-2.7, built here because the model invented queue
+        progress for items that have no queue when it wrote the lines itself."""
+        currency = product["currency"]
+        head = f"{product['name']}: {product['merchant']}"
+        price = formatMoney(product["cartonPrice"], currency)
+        if product["mode"] == MODE_DIRECT_ONLY:
+            return f"{head}, {price}, direct purchase only"
+        unit = formatMoney(product["unitPrice"], currency)
+        progress = f"{filled}/{product['cartonSize']} filled"
+        line = f"{head}, {price}/carton, {unit}/unit, {progress}"
+        return line + (", start the queue" if filled == 0 else "")
 
     def preview(self, product: dict, units: int) -> dict:
         """FR-3.5: everything the user confirms before anything is saved."""
