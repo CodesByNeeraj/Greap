@@ -1,0 +1,12 @@
+# Secrets must never be committed
+.env
+
+# Local environment and caches
+.venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
+
+# Runtime data written by the bot (user profiles, queues, Reap enrollment)
+data/
+test/.enrollment.json
