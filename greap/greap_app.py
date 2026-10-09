@@ -44,6 +44,7 @@ class GreapApp:
         """FR-1.1 to FR-1.5 for the first contact, then payments, then the agent."""
         if not self.store.getUser(telegramId):
             self.store.upsertUser(telegramId)
+            # Onboarding comes first (FR-1.2, FR-1.3): welcome, then the name.
             return [WELCOME, ASK_NAME]
         if self.desk.isPaying(telegramId):
             return [await self.handlePaymentText(telegramId, text)]

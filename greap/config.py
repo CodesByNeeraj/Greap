@@ -15,6 +15,7 @@ DEFAULT_EMAIL = "orders@example.com"
 # Reap requires a phone number on shipping addresses but the PRD never asks
 # for one, so sandbox orders use a fixed placeholder.
 DEFAULT_PHONE = "+6591234567"
+TRUTHY_VALUES = ("1", "true", "yes")
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,7 @@ class Settings:
     orderEmail: str
     defaultPhone: str
     dataDir: Path
+    dryRun: bool
 
 
 def requireEnv(name: str) -> str:
@@ -61,4 +63,5 @@ def loadSettings() -> Settings:
         orderEmail=os.environ.get("GREAP_ORDER_EMAIL", DEFAULT_EMAIL),
         defaultPhone=os.environ.get("GREAP_DEFAULT_PHONE", DEFAULT_PHONE),
         dataDir=Path(os.environ.get("GREAP_DATA_DIR", DEFAULT_DATA_DIR)),
+        dryRun=os.environ.get("GREAP_DRY_RUN", "").lower() in TRUTHY_VALUES,
     )

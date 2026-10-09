@@ -2,19 +2,23 @@
 
 from typing import Any
 
+import httpx
+
 from greap.clock import Clock
 from greap.constants import ENTRY_CANCELLED, ENTRY_EXPIRED, ENTRY_ORDERED, ENTRY_PAID
 from greap.context_store import ContextStore
 from greap.money import formatMoney
 from greap.notifier import Notifier
 from greap.procurement_search import ProcurementSearch
+from greap.profile import PROFILE_FIELDS, missingProfileFields
 from greap.queue_deadlines import applyChoice
+from greap.reap_client import ReapApiError
 from greap.queue_engine import cancelEntry, changeUnits
 from greap.recommendations import recommendationsFor
 from greap.shopping_tools import ShoppingTools
 
-REQUIRED_PROFILE_FIELDS = ("name", "addressLine1", "city", "country")
-PROFILE_FIELDS = REQUIRED_PROFILE_FIELDS + ("postalCode",)
+# Onboarding comes first: nothing works until the profile is complete.
+NEEDS_PROFILE = ("search_products", "join_queue", "buy_carton")
 
 
 class Toolbox:
@@ -48,10 +52,17 @@ class Toolbox:
         }
         if name not in handlers:
             return {"error": f"Unknown tool {name}"}
+        missing = missingProfileFields(self.store.getUser(tid))
+        if name in NEEDS_PROFILE and missing:
+            # Orders need a full address, so block shopping until it is saved.
+            return {"error": f"Profile incomplete. Ask the user for: {missing}"}
         try:
             return await handlers[name](tid, **args)
         except TypeError as error:
             return {"error": f"Bad arguments: {error}"}
+        except (ReapApiError, httpx.TransportError) as error:
+            # Reap outages happen; the agent should tell the user, not go silent.
+            return {"error": f"Reap is unavailable right now, try again soon: {error}"}
 
     async def saveProfile(self, tid: str, **fields: str) -> dict:
         """FR-1.4 and FR-1.6: partial saves let onboarding go one question at a time."""
@@ -60,7 +71,7 @@ class Toolbox:
         )
         return {
             "saved": True,
-            "stillMissing": [f for f in REQUIRED_PROFILE_FIELDS if f not in user],
+            "stillMissing": missingProfileFields(user),
         }
 
     def describeEntry(self, entry: dict) -> dict:

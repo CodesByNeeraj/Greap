@@ -3,7 +3,11 @@
 # Business rules from the PRD (sections 3 to 6)
 QUEUE_DEADLINE_DAYS = 5
 PAYMENT_WINDOW_HOURS = 24
-SEARCH_PAGE_SIZE = 6
+# Show everything Reap returns, up to a cap so a broad query cannot run away.
+SEARCH_RESULT_LIMIT = 50
+REAP_FETCH_SIZE = 20
+MAX_SEARCH_FETCHES = 10
+TELEGRAM_MESSAGE_LIMIT = 4000
 LOW_CONFIDENCE_THRESHOLD = 0.7
 MONEY_DECIMALS = 2
 
