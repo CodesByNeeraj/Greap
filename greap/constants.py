@@ -55,5 +55,7 @@ REAP_AVAILABILITY_FILTER = "AVAILABLE_ONLY"
 
 # Agent behaviour
 MAX_TOOL_ROUNDS = 8
+# gpt-6 models accept low, medium, high or xhigh. Low keeps replies quick.
+AGENT_REASONING_EFFORT = "low"
 MAX_HISTORY_MESSAGES = 30
 TICK_SECONDS = 60

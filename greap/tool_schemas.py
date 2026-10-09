@@ -6,17 +6,15 @@ from greap.constants import CHOICE_BUY_REMAINING, CHOICE_CANCEL, CHOICE_EXTEND
 
 
 def tool(name: str, description: str, properties: dict, required: list[str]) -> dict:
-    """Build one function-tool definition."""
+    """Build one function-tool definition in the Responses API's flat shape."""
     return {
         "type": "function",
-        "function": {
-            "name": name,
-            "description": description,
-            "parameters": {
-                "type": "object",
-                "properties": properties,
-                "required": required,
-            },
+        "name": name,
+        "description": description,
+        "parameters": {
+            "type": "object",
+            "properties": properties,
+            "required": required,
         },
     }
 

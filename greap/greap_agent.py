@@ -1,4 +1,8 @@
-"""Greap Agent: the conversational layer (an LLM with tool calling)."""
+"""Greap Agent: the conversational layer (an LLM with tool calling).
+
+Uses OpenAI's Responses API, because the gpt-6 models do not allow function
+tools with reasoning on the older Chat Completions endpoint.
+"""
 
 import json
 from typing import Any
@@ -6,7 +10,8 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from greap.agent_prompt import buildSystemPrompt
-from greap.constants import MAX_HISTORY_MESSAGES, MAX_TOOL_ROUNDS
+from greap.constants import AGENT_REASONING_EFFORT, MAX_HISTORY_MESSAGES
+from greap.constants import MAX_TOOL_ROUNDS
 from greap.context_store import ContextStore
 from greap.tool_schemas import TOOL_SCHEMAS
 from greap.toolbox import Toolbox
@@ -14,14 +19,19 @@ from greap.toolbox import Toolbox
 FALLBACK_REPLY = "Sorry, I got stuck on that. Could you rephrase?"
 
 
-def trimHistory(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def isUserMessage(item: Any) -> bool:
+    """Only our own user messages are plain dicts; model output items are objects."""
+    return isinstance(item, dict) and item.get("role") == "user"
+
+
+def trimHistory(history: list[Any]) -> list[Any]:
     """Cap context size, cutting only at a user turn.
 
     Cutting mid tool-call would leave a tool result without its call, which
     the API rejects.
     """
     trimmed = history[-MAX_HISTORY_MESSAGES:]
-    while trimmed and trimmed[0]["role"] != "user":
+    while trimmed and not isUserMessage(trimmed[0]):
         trimmed = trimmed[1:]
     return trimmed
 
@@ -40,24 +50,6 @@ def removeRepeatedLines(text: str) -> str:
     return "\n".join(kept)
 
 
-def assistantMessage(message: Any) -> dict[str, Any]:
-    """Convert the SDK message back into the dict the API expects."""
-    result: dict[str, Any] = {"role": "assistant", "content": message.content}
-    if message.tool_calls:
-        result["tool_calls"] = [
-            {
-                "id": call.id,
-                "type": "function",
-                "function": {
-                    "name": call.function.name,
-                    "arguments": call.function.arguments,
-                },
-            }
-            for call in message.tool_calls
-        ]
-    return result
-
-
 class GreapAgent:
     """Keeps a short per-user conversation and runs the tool loop."""
 
@@ -68,34 +60,38 @@ class GreapAgent:
         self.model = model
         self.store = store
         self.toolbox = toolbox
-        self.histories: dict[str, list[dict[str, Any]]] = {}
+        self.histories: dict[str, list[Any]] = {}
 
     async def handleMessage(self, telegramId: str, text: str) -> str:
         """Answer one user message, calling tools as the model asks."""
         history = self.histories.setdefault(telegramId, [])
         history.append({"role": "user", "content": text})
         for _ in range(MAX_TOOL_ROUNDS):
-            system = buildSystemPrompt(self.store.getUser(telegramId))
-            reply = await self.llm.chat.completions.create(
+            reply = await self.llm.responses.create(
                 model=self.model,
-                messages=[{"role": "system", "content": system}, *trimHistory(history)],
+                instructions=buildSystemPrompt(self.store.getUser(telegramId)),
+                input=trimHistory(history),
                 tools=TOOL_SCHEMAS,
+                reasoning={"effort": AGENT_REASONING_EFFORT},
             )
-            message = reply.choices[0].message
-            history.append(assistantMessage(message))
-            if not message.tool_calls:
-                return removeRepeatedLines(message.content or FALLBACK_REPLY)
-            await self.runToolCalls(telegramId, message.tool_calls, history)
+            # Output items (including reasoning) go back in so tool turns stay valid.
+            history.extend(reply.output)
+            calls = [item for item in reply.output if item.type == "function_call"]
+            if not calls:
+                return removeRepeatedLines(reply.output_text or FALLBACK_REPLY)
+            await self.runToolCalls(telegramId, calls, history)
         return FALLBACK_REPLY
 
     async def runToolCalls(self, telegramId: str, calls: list, history: list) -> None:
         """Execute each requested tool and feed the result back to the model."""
         for call in calls:
             result = await self.toolbox.run(
-                telegramId,
-                call.function.name,
-                json.loads(call.function.arguments or "{}"),
+                telegramId, call.name, json.loads(call.arguments or "{}")
             )
             history.append(
-                {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)}
+                {
+                    "type": "function_call_output",
+                    "call_id": call.call_id,
+                    "output": json.dumps(result),
+                }
             )
